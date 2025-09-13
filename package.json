@@ -1,0 +1,21 @@
+{
+  "name": "pomodoro-cli-timer",
+  "version": "1.0.0",
+  "description": "A simple CLI Pomodoro timer with a progress bar.",
+  "main": "index.js",
+  "bin": {
+    "pomodoro-timer": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "pomodoro",
+    "cli",
+    "timer",
+    "terminal"
+  ],
+  "author": "",
+  "license": "ISC"
+}
+
