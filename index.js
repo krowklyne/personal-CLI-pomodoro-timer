@@ -67,11 +67,8 @@ const main = () => {
       if (timeLeftInSeconds <= 0) {
         clearInterval(timerInterval);
         process.stdout.removeListener('resize', redraw);
-        // Show cursor again before printing final message.
-        process.stdout.write('\x1B[?25h');
-        // \x07 is the ASCII BEL character, which makes the terminal beep.
-        process.stdout.write('\n\nTime\'s up! Take a break.\x07\n');
-        process.exit(0);
+        runCompletionAnimation();
+        return; // The animation function will handle exiting the process.
       }
       
       timeLeftInSeconds--;
@@ -97,6 +94,81 @@ const centerContent = (content, terminalWidth) => {
       return `${padding}${line}`;
   }).join('\n');
 };
+
+/**
+ * Runs a confetti and text animation when the timer completes.
+ */
+const runCompletionAnimation = () => {
+  const terminalWidth = process.stdout.columns || 80;
+  const terminalHeight = process.stdout.rows || 24;
+
+  // 1. Clear the screen.
+  process.stdout.write('\x1B[2J\x1B[0f');
+
+  // 2. Prepare and print the congratulatory message.
+  const message = [
+    ' ██████╗  ██████╗ ██████╗ ██████╗        ██╗ ██████╗ ██████╗ ',
+    '██╔════╝ ██╔═══██╗██╔═══██╗██╔══██╗       ██║██╔═══██╗██╔══██╗',
+    '██║  ███╗██║   ██║██║   ██║██║  ██║       ██║██║   ██║██████╔╝',
+    '██║   ██║██║   ██║██║   ██║██║  ██║  ██   ██║██║   ██║██╔══██╗',
+    '╚██████╔╝╚██████╔╝╚██████╔╝██████╔╝  ╚█████╔╝╚██████╔╝██████╔╝',
+    ' ╚═════╝  ╚═════╝  ╚═════╝ ╚═════╝    ╚════╝  ╚═════╝ ╚═════╝ '
+  ];
+  const messageHeight = message.length;
+  const topPadding = Math.floor((terminalHeight - messageHeight) / 2);
+  process.stdout.write('\n'.repeat(Math.max(0, topPadding)));
+  
+  const centeredMessage = centerContent(message, terminalWidth);
+  process.stdout.write(centeredMessage);
+
+  // 3. Define confetti properties.
+  const confettiChars = ['*', '•', '+', 'o'];
+  const confettiColors = [
+    '\x1B[91m', // Light Red
+    '\x1B[92m', // Light Green
+    '\x1B[93m', // Light Yellow
+    '\x1B[94m', // Light Blue
+    '\x1B[95m', // Light Magenta
+    '\x1B[96m', // Light Cyan
+  ];
+  
+  let animationFrames = 0;
+  const totalFrames = 30; // 3 seconds at 100ms interval
+  const particlesPerFrame = 15;
+
+  const animationInterval = setInterval(() => {
+    // Draw new particles at random locations
+    for (let i = 0; i < particlesPerFrame; i++) {
+        const x = Math.floor(Math.random() * terminalWidth) + 1;
+        const y = Math.floor(Math.random() * terminalHeight) + 1;
+        const char = confettiChars[Math.floor(Math.random() * confettiChars.length)];
+        const color = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+
+        process.stdout.write(`\x1B[${y};${x}H${color}${char}`);
+    }
+    
+    animationFrames++;
+
+    if (animationFrames >= totalFrames) {
+      clearInterval(animationInterval);
+      
+      // Final cleanup and exit message
+      const finalMessageLine = topPadding + messageHeight + 3;
+      process.stdout.write(`\x1B[${finalMessageLine};0H`); // Move to start of line
+      process.stdout.write('\x1B[0m');  // Reset color
+      process.stdout.write('\x1B[2K'); // Clear the line
+
+      const finalMessage = "Time's up! Take a break.";
+      process.stdout.write(centerContent(finalMessage, terminalWidth));
+      
+      process.stdout.write('\x1B[?25h'); // Show cursor
+      process.stdout.write('\x07');     // Beep
+      process.stdout.write('\n\n');
+      process.exit(0);
+    }
+  }, 100);
+};
+
 
 /**
  * Scales a single base ASCII character art both horizontally and vertically.
