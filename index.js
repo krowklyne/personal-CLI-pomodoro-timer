@@ -7,7 +7,7 @@
  *   pomodoro-timer [mins]   (starts a timer for [mins] minutes)
  */
 
-// ASCII art for large numbers (Height: 5, Width: 5)
+// Base ASCII art for numbers (Height: 5, Width: 5). These will be scaled.
 const ASCII_NUMBERS = {
   '0': [' ███ ', '█   █', '█ █ █', '█   █', ' ███ '],
   '1': ['  █  ', ' ██  ', '  █  ', '  █  ', ' ███ '],
@@ -21,7 +21,6 @@ const ASCII_NUMBERS = {
   '9': [' ███ ', '█   █', ' ████', '    █', ' ███ '],
   ':': ['     ', '  █  ', '     ', '  █  ', '     '],
 };
-
 
 const main = () => {
   // 1. Get duration from command-line arguments, default to 25 minutes.
@@ -86,6 +85,68 @@ const main = () => {
 };
 
 /**
+ * A utility function to center a block of text (string or array of strings) within the terminal width.
+ * @param {string|string[]} content - The text content to center.
+ * @param {number} terminalWidth - The total width of the terminal.
+ * @returns {string} The centered text block as a single string.
+ */
+const centerContent = (content, terminalWidth) => {
+  const lines = Array.isArray(content) ? content : content.split('\n');
+  return lines.map(line => {
+      const padding = ' '.repeat(Math.max(0, Math.floor((terminalWidth - line.length) / 2)));
+      return `${padding}${line}`;
+  }).join('\n');
+};
+
+/**
+ * Scales a single base ASCII character art both horizontally and vertically.
+ * @param {string[]} charArt - Array of strings for the base character (e.g., from ASCII_NUMBERS).
+ * @param {number} scale - The integer factor to scale by (e.g., 2 means twice as big).
+ * @returns {string[]} The scaled character art as an array of strings.
+ */
+const scaleAsciiCharacter = (charArt, scale) => {
+  if (scale <= 1) {
+    return charArt;
+  }
+  const scaledArt = [];
+  for (const row of charArt) {
+    // Scale horizontally by repeating each character `scale` times
+    const scaledRow = row.split('').map(char => char.repeat(scale)).join('');
+    // Scale vertically by adding the scaled row `scale` times
+    for (let i = 0; i < scale; i++) {
+      scaledArt.push(scaledRow);
+    }
+  }
+  return scaledArt;
+};
+
+/**
+ * Generates the complete, multi-row display for the timer by scaling and assembling ASCII characters.
+ * @param {string} timeString - The "mm:ss" time string.
+ * @param {number} scale - The integer factor to scale the characters by.
+ * @returns {string[]} An array of strings, with each string being a row of the final timer display.
+ */
+const generateScaledTimerRows = (timeString, scale) => {
+  // 1. Get scaled art for each character in the time string
+  const scaledArtParts = timeString.split('').map(char => {
+    const baseArt = ASCII_NUMBERS[char] || ASCII_NUMBERS[':'];
+    return scaleAsciiCharacter(baseArt, scale);
+  });
+  
+  const scaledCharHeight = scaledArtParts[0].length;
+  const timerRows = [];
+  const scaledSpace = ' '.repeat(scale * 2);
+
+  // 2. Assemble the final rows by joining row parts with a separator.
+  // This is more robust than concatenation and trimEnd() and prevents flickering.
+  for (let i = 0; i < scaledCharHeight; i++) {
+    const rowParts = scaledArtParts.map(part => part[i]);
+    timerRows.push(rowParts.join(scaledSpace));
+  }
+  return timerRows;
+};
+
+/**
  * Clears the console and draws the centered, responsive progress bar and timer.
  * @param {number} progress - A float between 0 and 1.
  * @param {number} minutes - Remaining minutes.
@@ -93,46 +154,36 @@ const main = () => {
  */
 const drawDisplay = (progress, minutes, seconds) => {
   const terminalWidth = process.stdout.columns || 80;
+  const terminalHeight = process.stdout.rows || 24;
 
   // 1. Clear the terminal screen and move cursor to top-left.
   process.stdout.write('\x1B[2J\x1B[0f');
 
-  // 2. Construct and center the Progress Bar.
-  const barMargin = 4; // Margin on both left and right
+  // 2. Construct the Progress Bar string.
+  const barMargin = 4;
   const barWidth = Math.max(10, terminalWidth - (barMargin * 2) - 2); // -2 for brackets
   const filledWidth = Math.round(barWidth * progress);
   const emptyWidth = barWidth - filledWidth;
   const filledBar = '█'.repeat(filledWidth);
   const emptyBar = '░'.repeat(emptyWidth);
   const barContent = `[${filledBar}${emptyBar}]`;
-  const barPadding = ' '.repeat(Math.max(0, Math.floor((terminalWidth - barContent.length) / 2)));
-  const progressBarString = `${barPadding}${barContent}\n\n`;
+  const centeredBar = centerContent(barContent, terminalWidth);
 
-  // 3. Construct the large timer display from ASCII characters.
+  // 3. Determine the scale for the timer based on terminal size.
+  // A base timer "00:00" is 5 rows high and ~30 chars wide.
+  const verticalScale = Math.floor((terminalHeight - 4) / 5); // 5 is base height, 4 is for bar and padding
+  const horizontalScale = Math.floor(terminalWidth / 35); // 35 is a safe est. base width
+  const scale = Math.max(1, Math.min(verticalScale, horizontalScale));
+
+  // 4. Construct the large, scaled timer display.
   const timeString = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  const charHeight = ASCII_NUMBERS['0'].length;
-  let timerRows = Array(charHeight).fill('');
-
-  for (const char of timeString) {
-    const ascii_char = ASCII_NUMBERS[char];
-    if (ascii_char) {
-      for (let i = 0; i < charHeight; i++) {
-        // Add character row and a space for separation.
-        timerRows[i] += ascii_char[i] + ' ';
-      }
-    }
-  }
-
-  // 4. Center the assembled ASCII timer rows.
-  const timerContentWidth = timerRows[0] ? timerRows[0].length : 0;
-  const timerPadding = ' '.repeat(Math.max(0, Math.floor((terminalWidth - timerContentWidth) / 2)));
-  const centeredTimerRows = timerRows.map(row => `${timerPadding}${row}`);
-  const largeTimerString = centeredTimerRows.join('\n');
+  const timerRows = generateScaledTimerRows(timeString, scale);
+  const centeredTimer = centerContent(timerRows, terminalWidth);
 
   // 5. Combine and print the full display to the console.
-  process.stdout.write(progressBarString + largeTimerString);
+  const fullDisplay = `${centeredBar}\n\n${centeredTimer}`;
+  process.stdout.write(fullDisplay);
 };
 
 // Run the main function.
 main();
-
