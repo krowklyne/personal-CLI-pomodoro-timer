@@ -35,10 +35,18 @@ const main = () => {
     durationMinutes = 25;
   }
 
-  let totalSeconds = durationMinutes * 60;
+  const totalSeconds = durationMinutes * 60;
   let timeLeftInSeconds = totalSeconds;
 
   console.log(`Starting Pomodoro timer for ${durationMinutes} minutes. Press Ctrl+C to exit.`);
+  
+  const redraw = () => {
+    const minutes = Math.floor(timeLeftInSeconds / 60);
+    const seconds = timeLeftInSeconds % 60;
+    const progress = totalSeconds > 0 ? (totalSeconds - timeLeftInSeconds) / totalSeconds : 0;
+    drawDisplay(progress, minutes, seconds);
+  };
+
   // Wait a moment before starting the timer to allow user to read the message.
   setTimeout(() => {
     // Hide cursor for a cleaner display.
@@ -52,49 +60,53 @@ const main = () => {
       process.exit(0);
     });
     
+    // Add a resize listener to make the display responsive.
+    process.stdout.on('resize', redraw);
+
     // Set up the one-second interval for the timer.
     const timerInterval = setInterval(() => {
-      timeLeftInSeconds--;
-      
-      const minutes = Math.floor(timeLeftInSeconds / 60);
-      const seconds = timeLeftInSeconds % 60;
-      const progress = (totalSeconds - timeLeftInSeconds) / totalSeconds;
-      
-      drawDisplay(progress, minutes, seconds);
-
-      // When the timer is done...
       if (timeLeftInSeconds <= 0) {
         clearInterval(timerInterval);
+        process.stdout.removeListener('resize', redraw);
         // Show cursor again before printing final message.
         process.stdout.write('\x1B[?25h');
         // \x07 is the ASCII BEL character, which makes the terminal beep.
         process.stdout.write('\n\nTime\'s up! Take a break.\x07\n');
         process.exit(0);
       }
+      
+      timeLeftInSeconds--;
+      redraw();
+
     }, 1000);
 
     // Initial draw
-    drawDisplay(0, durationMinutes, 0);
+    redraw();
   }, 1000);
 };
 
 /**
- * Clears the console and draws the progress bar and large timer.
+ * Clears the console and draws the centered, responsive progress bar and timer.
  * @param {number} progress - A float between 0 and 1.
  * @param {number} minutes - Remaining minutes.
  * @param {number} seconds - Remaining seconds.
  */
 const drawDisplay = (progress, minutes, seconds) => {
+  const terminalWidth = process.stdout.columns || 80;
+
   // 1. Clear the terminal screen and move cursor to top-left.
   process.stdout.write('\x1B[2J\x1B[0f');
 
-  // 2. Construct and draw the Progress Bar.
-  const barWidth = 40;
+  // 2. Construct and center the Progress Bar.
+  const barMargin = 4; // Margin on both left and right
+  const barWidth = Math.max(10, terminalWidth - (barMargin * 2) - 2); // -2 for brackets
   const filledWidth = Math.round(barWidth * progress);
   const emptyWidth = barWidth - filledWidth;
   const filledBar = '█'.repeat(filledWidth);
   const emptyBar = '░'.repeat(emptyWidth);
-  const progressBarString = `[${filledBar}${emptyBar}]\n\n`;
+  const barContent = `[${filledBar}${emptyBar}]`;
+  const barPadding = ' '.repeat(Math.max(0, Math.floor((terminalWidth - barContent.length) / 2)));
+  const progressBarString = `${barPadding}${barContent}\n\n`;
 
   // 3. Construct the large timer display from ASCII characters.
   const timeString = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
@@ -110,9 +122,14 @@ const drawDisplay = (progress, minutes, seconds) => {
       }
     }
   }
-  const largeTimerString = timerRows.join('\n');
 
-  // 4. Combine and print the full display to the console.
+  // 4. Center the assembled ASCII timer rows.
+  const timerContentWidth = timerRows[0] ? timerRows[0].length : 0;
+  const timerPadding = ' '.repeat(Math.max(0, Math.floor((terminalWidth - timerContentWidth) / 2)));
+  const centeredTimerRows = timerRows.map(row => `${timerPadding}${row}`);
+  const largeTimerString = centeredTimerRows.join('\n');
+
+  // 5. Combine and print the full display to the console.
   process.stdout.write(progressBarString + largeTimerString);
 };
 
